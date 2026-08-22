@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: hermes-gateway
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: HERMES_HF_TOKEN
+        sync: false
+      - key: MEMORY_REPO
+        value: salah1593/hermes-memory
+      - key: BACKUP_INTERVAL
+        value: "900"
+      - key: RESTORE_MEMORY
+        value: "1"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: NOTION_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_USERS
+        sync: false
+      - key: TELEGRAM_HOME_CHANNEL
+        sync: false
+      - key: TELEGRAM_HOME_CHANNEL_THREAD_ID
+        sync: false
