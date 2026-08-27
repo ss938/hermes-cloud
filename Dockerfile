@@ -9,7 +9,7 @@ RUN git clone --depth 1 --branch ${HERMES_REF} \
         https://github.com/NousResearch/hermes-agent.git /app/hermes-agent
 
 WORKDIR /app/hermes-agent
-RUN pip install --no-cache-dir . && pip install --no-cache-dir huggingface_hub
+RUN pip install --no-cache-dir -e . && pip install --no-cache-dir huggingface_hub
 
 RUN useradd -m -u 1000 hermes
 ENV HERMES_HOME=/home/hermes/.hermes \
