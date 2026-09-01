@@ -127,6 +127,12 @@ def backup_loop() -> None:
 
 
 class HealthHandler(BaseHTTPRequestHandler):
+    def do_HEAD(self):  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         body = b"ok"
         self.send_response(200)
