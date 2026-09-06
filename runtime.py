@@ -22,7 +22,8 @@ log = logging.getLogger("hermes-cloud")
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 REPO_ID = os.environ.get("MEMORY_REPO", "salah1593/hermes-memory")
 TOKEN = os.environ.get("HERMES_HF_TOKEN", "")
-INTERVAL = int(os.environ.get("BACKUP_INTERVAL", "900"))
+INTERVAL = int(os.environ.get("BACKUP_INTERVAL", "86400"))
+CHANGE_KEY_FILE = "/tmp/hermes-last-snapshot.key"
 
 SNAPSHOT_ITEMS = [
     "memories", "sessions", "platforms", "pairing", "skills", "hooks",
@@ -111,16 +112,58 @@ def upload_backup(tar_path: Path) -> None:
     )
 
 
+def snapshot_change_key() -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+
+    def add(p: Path, tag: str) -> None:
+        if not p.exists():
+            return
+        if p.is_dir():
+            for f in sorted(p.rglob("*")):
+                if not f.is_file() or f.suffix == ".lock" or "__pycache__" in f.parts:
+                    continue
+                st = f.stat()
+                h.update(b"%s|%s|%d|%d\n" % (tag.encode(), str(f.relative_to(HERMES_HOME)).encode(), st.st_mtime_ns, st.st_size))
+        else:
+            st = p.stat()
+            h.update(b"%s|%s|%d|%d\n" % (tag.encode(), p.name.encode(), st.st_mtime_ns, st.st_size))
+
+    for item in SNAPSHOT_ITEMS:
+        add(HERMES_HOME / item, "f")
+    for rel in SQLITE_DBS:
+        p = HERMES_HOME / rel
+        if not p.exists():
+            continue
+        try:
+            con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+            dv = con.execute("PRAGMA data_version").fetchone()[0]
+            con.close()
+        except Exception:  # noqa: BLE001
+            dv = 0
+        h.update(b"sql|%s|%d\n" % (rel.encode(), dv))
+    return h.hexdigest()
+
+
 def backup_loop() -> None:
     tmp = Path("/tmp/hermes-backup.tar.gz")
     time.sleep(60)
     while True:
         if TOKEN and HERMES_HOME.exists():
             try:
-                build_snapshot(tmp)
-                upload_backup(tmp)
-                log.info("memory backup uploaded (%.1f MB)", tmp.stat().st_size / 1e6)
-                tmp.unlink(missing_ok=True)
+                key = snapshot_change_key()
+                last_key = None
+                if Path(CHANGE_KEY_FILE).exists():
+                    last_key = Path(CHANGE_KEY_FILE).read_text().strip()
+                if key == last_key:
+                    log.info("memory unchanged (key %s) - skipping upload", key[:8])
+                else:
+                    build_snapshot(tmp)
+                    upload_backup(tmp)
+                    Path(CHANGE_KEY_FILE).write_text(key)
+                    log.info("memory backup uploaded (%.1f MB)", tmp.stat().st_size / 1e6)
+                    tmp.unlink(missing_ok=True)
             except Exception as exc:  # noqa: BLE001
                 log.warning("backup failed: %s", exc)
         time.sleep(INTERVAL)

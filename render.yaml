@@ -11,7 +11,7 @@ services:
       - key: MEMORY_REPO
         value: salah1593/hermes-memory
       - key: BACKUP_INTERVAL
-        value: "900"
+        value: "86400"
       - key: RESTORE_MEMORY
         value: "1"
       - key: GEMINI_API_KEY
