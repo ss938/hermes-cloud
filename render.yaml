@@ -18,6 +18,12 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3-flash
       - key: NOUS_MODEL
         value: upstage/solar-pro4:free
       - key: OBSIDIAN_REPO
@@ -32,4 +38,3 @@ services:
         sync: false
       - key: TELEGRAM_HOME_CHANNEL_THREAD_ID
         sync: false
-
