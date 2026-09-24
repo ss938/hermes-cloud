@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Hermes cloud runtime: memory restore, periodic HF backup, health endpoint."""
+"""Hermes cloud runtime: memory restore, periodic HF backup, health endpoint, Obsidian vault sync."""
 import io
 import logging
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tarfile
 import threading
@@ -24,6 +25,12 @@ REPO_ID = os.environ.get("MEMORY_REPO", "salah1593/hermes-memory")
 TOKEN = os.environ.get("HERMES_HF_TOKEN", "")
 INTERVAL = int(os.environ.get("BACKUP_INTERVAL", "86400"))
 CHANGE_KEY_FILE = "/tmp/hermes-last-snapshot.key"
+
+# ---- Obsidian vault sync settings ----
+OBSIDIAN_REPO = os.environ.get("OBSIDIAN_REPO", "salah1593/obsidian-vault")
+OBSIDIAN_DIR = Path(os.environ.get("OBSIDIAN_DIR", "/home/hermes/obsidian-vault"))
+VAULT_INTERVAL = int(os.environ.get("VAULT_SYNC_INTERVAL", "300"))
+HF_USERNAME = os.environ.get("HF_USERNAME", "salah1593")
 
 SNAPSHOT_ITEMS = [
     "memories", "sessions", "platforms", "pairing", "skills", "hooks",
@@ -169,6 +176,79 @@ def backup_loop() -> None:
         time.sleep(INTERVAL)
 
 
+# ---- Obsidian vault sync ----
+
+def _run(cmd, cwd=None, timeout=180):
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except Exception as exc:  # noqa: BLE001
+        return -1, str(exc)
+
+
+def vault_auth_url() -> str:
+    return f"https://{HF_USERNAME}:{TOKEN}@huggingface.co/datasets/{OBSIDIAN_REPO}"
+
+
+def vault_ensure_clone() -> bool:
+    if (OBSIDIAN_DIR / ".git").exists():
+        return True
+    OBSIDIAN_DIR.parent.mkdir(parents=True, exist_ok=True)
+    rc, out = _run(["git", "clone", vault_auth_url(), str(OBSIDIAN_DIR)])
+    if rc != 0:
+        log.warning("vault clone failed: %s", out)
+        return False
+    _run(["git", "config", "user.email", "hermes@cloud.local"], cwd=OBSIDIAN_DIR)
+    _run(["git", "config", "user.name", "hermes-cloud"], cwd=OBSIDIAN_DIR)
+    log.info("obsidian vault cloned -> %s", OBSIDIAN_DIR)
+    return True
+
+
+def vault_sync_once() -> None:
+    if not TOKEN:
+        log.warning("HERMES_HF_TOKEN not set - skipping vault sync")
+        return
+    if not vault_ensure_clone():
+        return
+    # 1) سحب تغييرات المستخدم (من Obsidian على جهازه)
+    rc, out = _run(["git", "pull", "--rebase", "--autostash"], cwd=OBSIDIAN_DIR)
+    if rc != 0:
+        log.warning("vault pull issue: %s", out)
+    # 2) دفع تغييرات نبراس (تعديلات كتبها على الملاحظات)
+    _run(["git", "add", "-A"], cwd=OBSIDIAN_DIR)
+    rc, out = _run(["git", "commit", "-m", "sync via hermes-cloud"], cwd=OBSIDIAN_DIR)
+    if rc == 0:
+        rc, out = _run(["git", "push"], cwd=OBSIDIAN_DIR)
+        if rc != 0:
+            log.warning("vault push failed: %s", out)
+        else:
+            log.info("obsidian vault synced (pushed)")
+    else:
+        if "nothing to commit" in out or "nothing added" in out:
+            log.info("obsidian vault unchanged")
+        else:
+            log.warning("vault commit skipped: %s", out)
+
+
+def vault_loop() -> None:
+    time.sleep(30)
+    while True:
+        try:
+            vault_sync_once()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vault sync error: %s", exc)
+        time.sleep(VAULT_INTERVAL)
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     def do_HEAD(self):  # noqa: N802
         self.send_response(200)
@@ -191,6 +271,7 @@ class HealthHandler(BaseHTTPRequestHandler):
 def serve_health() -> None:
     port = int(os.environ.get("PORT", "10000"))
     threading.Thread(target=backup_loop, daemon=True).start()
+    threading.Thread(target=vault_loop, daemon=True).start()
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     log.info("health endpoint listening on :%s", port)
     server.serve_forever()
@@ -200,7 +281,9 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "restore":
         restore_from_hub()
+    elif cmd == "vault-init":
+        vault_sync_once()
     elif cmd == "serve":
         serve_health()
     else:
-        print(f"usage: {sys.argv[0]} restore|serve")
+        print(f"usage: {sys.argv[0]} restore|vault-init|serve")
