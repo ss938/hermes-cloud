@@ -48,41 +48,102 @@ if um.exists():
         print("✓ added obsidian vault note to USER.md")
 PY
 
-echo "→ configuring OpenCode Zen provider (Big Pickle)..."
+echo "→ configuring model provider (Nous Portal preferred)..."
 python - << 'PY'
 import os
+import json
 import shutil
 import yaml
 from pathlib import Path
+from huggingface_hub import hf_hub_download
 
-key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
-if not key:
-    print("⚠ OPENCODE_API_KEY not set — skipping model switch")
-else:
-    home = Path("/home/hermes/.hermes")
-    envf = home / ".env"
-    cfg = home / "config.yaml"
+home = Path("/home/hermes/.hermes")
+envf = home / ".env"
+cfg = home / "config.yaml"
+authf = home / "auth.json"
 
-    if not cfg.exists():
-        print("⚠ config.yaml missing — skipping model switch")
+NOUS_MODEL = (os.environ.get("NOUS_MODEL") or "upstage/solar-pro4:free").strip()
+
+def has_nous_auth():
+    try:
+        data = json.loads(authf.read_text())
+        providers = data.get("providers") or {}
+        return "nous" in providers
+    except Exception:
+        return False
+
+# 1) استرجاع هوية Nous من مستودع Hugging Face (nous-auth.json) إن لم تكن موجودة
+if not has_nous_auth():
+    token = (os.environ.get("HERMES_HF_TOKEN") or "").strip()
+    repo = (os.environ.get("MEMORY_REPO") or "salah1593/hermes-memory").strip()
+    if token:
+        try:
+            p = hf_hub_download(
+                repo_id=repo, filename="nous-auth.json",
+                repo_type="dataset", token=token, force_download=True,
+            )
+            data = json.loads(Path(p).read_text())
+            if "nous" in (data.get("providers") or {}):
+                authf.write_text(json.dumps(data))
+                print("✓ nous-auth.json restored from Hugging Face (Nous identity)")
+        except Exception as exc:
+            print("⚠ nous-auth.json not on HF yet: %s" % exc)
     else:
-        # 1) المفتاح في .env (لا يُرفع إلى Hugging Face — غير موجود في قائمة SNAPSHOT_ITEMS)
+        print("⚠ HERMES_HF_TOKEN missing — cannot fetch Nous identity")
+
+if not cfg.exists():
+    print("⚠ config.yaml missing — skipping provider switch")
+elif has_nous_auth():
+    # Nous Portal — المزوّد الرسمي لهرمز، يعمل من أي خادم (المُفضَّل)
+    shutil.copy(cfg, home / "config.yaml.nous.bak")
+    data = yaml.safe_load(cfg.read_text()) or {}
+    model = data.get("model") if isinstance(data.get("model"), dict) else {}
+    model.update({
+        "provider": "nous",
+        "default": NOUS_MODEL,
+        "base_url": "https://inference-api.nousresearch.com/v1",
+        "api_mode": "chat_completions",
+    })
+    data["model"] = model
+    cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    print(f"✓ config.yaml → provider nous / model {NOUS_MODEL}")
+else:
+    or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    oc_key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
+
+    if or_key:
+        # OpenRouter — مجاني بلا بطاقة ويعمل من الخوادم الخارجية
+        lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
+                 if not l.startswith("OPENROUTER_API_KEY=")]
+        envf.write_text("\n".join(lines + [f"OPENROUTER_API_KEY={or_key}"]) + "\n")
+        print("✓ OPENROUTER_API_KEY saved to .env")
+
+        shutil.copy(cfg, home / "config.yaml.provider.bak")
+        data = yaml.safe_load(cfg.read_text()) or {}
+        model = data.get("model") if isinstance(data.get("model"), dict) else {}
+        model.update({
+            "provider": "openrouter",
+            "default": "openrouter/free",
+            "base_url": "",
+            "api_mode": "chat_completions",
+        })
+        data["model"] = model
+        cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+        print("✓ config.yaml → provider openrouter / model openrouter/free")
+    elif oc_key:
+        # OpenCode Zen — يعمل فقط من داخل OpenCode (غير صالح للخوادم الخارجية)
         lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
                  if not l.startswith("OPENCODE_API_KEY=")]
-        envf.write_text("\n".join(lines + [f"OPENCODE_API_KEY={key}"]) + "\n")
+        envf.write_text("\n".join(lines + [f"OPENCODE_API_KEY={oc_key}"]) + "\n")
         print("✓ OPENCODE_API_KEY saved to .env")
 
-        # 2) نسخة احتياطية قبل التعديل
-        shutil.copy(cfg, home / f"config.yaml.opencode.bak")
-
-        # 3) تحديث config.yaml: مزود opencode + موديل big-pickle
+        shutil.copy(cfg, home / "config.yaml.opencode.bak")
         data = yaml.safe_load(cfg.read_text()) or {}
         providers = data.setdefault("providers", {})
         providers["opencode"] = {
             "api": "https://opencode.ai/zen/v1",
             "api_key": "${OPENCODE_API_KEY}",
         }
-        # تحديث الموديل الأساسي مع الحفاظ على أي مفاتيح أخرى داخل model:
         model = data.get("model") if isinstance(data.get("model"), dict) else {}
         model.update({
             "provider": "opencode",
@@ -92,7 +153,9 @@ else:
         })
         data["model"] = model
         cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-        print("✓ config.yaml → provider opencode / model big-pickle")
+        print("✓ config.yaml → provider opencode / model big-pickle (قد يُرفض خارج OpenCode)")
+    else:
+        print("⚠ لا يوجد أي مزود — ضع nous-auth.json في Hugging Face")
 PY
 
 echo "→ initial obsidian vault sync..."
