@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-ARG HERMES_REF=v2026.7.30
+ARG HERMES_REF=v2026.9.21
 RUN git clone --depth 1 --branch ${HERMES_REF} \
         https://github.com/NousResearch/hermes-agent.git /app/hermes-agent
 
