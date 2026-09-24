@@ -1,10 +1,15 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates curl \
+        git ca-certificates curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-ARG HERMES_REF=v2026.9.21
+# Node.js 22 (LTS) — required for npx-based MCP servers (e.g. Notion)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG HERMES_REF=v2026.9.24
 RUN git clone --depth 1 --branch ${HERMES_REF} \
         https://github.com/NousResearch/hermes-agent.git /app/hermes-agent
 
