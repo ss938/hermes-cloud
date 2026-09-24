@@ -152,54 +152,54 @@ else:
         cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
         print(f"✓ config.yaml → provider nous / model {NOUS_MODEL}")
     else:
-    or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    oc_key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
+        or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+        oc_key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
 
-    if or_key:
-        # OpenRouter — مجاني بلا بطاقة ويعمل من الخوادم الخارجية
-        lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
-                 if not l.startswith("OPENROUTER_API_KEY=")]
-        envf.write_text("\n".join(lines + [f"OPENROUTER_API_KEY={or_key}"]) + "\n")
-        print("✓ OPENROUTER_API_KEY saved to .env")
+        if or_key:
+            # OpenRouter — مجاني بلا بطاقة ويعمل من الخوادم الخارجية
+            lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
+                     if not l.startswith("OPENROUTER_API_KEY=")]
+            envf.write_text("\n".join(lines + [f"OPENROUTER_API_KEY={or_key}"]) + "\n")
+            print("✓ OPENROUTER_API_KEY saved to .env")
 
-        shutil.copy(cfg, home / "config.yaml.provider.bak")
-        data = yaml.safe_load(cfg.read_text()) or {}
-        model = data.get("model") if isinstance(data.get("model"), dict) else {}
-        model.update({
-            "provider": "openrouter",
-            "default": "openrouter/free",
-            "base_url": "",
-            "api_mode": "chat_completions",
-        })
-        data["model"] = model
-        cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-        print("✓ config.yaml → provider openrouter / model openrouter/free")
-    elif oc_key:
-        # OpenCode Zen — يعمل فقط من داخل OpenCode (غير صالح للخوادم الخارجية)
-        lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
-                 if not l.startswith("OPENCODE_API_KEY=")]
-        envf.write_text("\n".join(lines + [f"OPENCODE_API_KEY={oc_key}"]) + "\n")
-        print("✓ OPENCODE_API_KEY saved to .env")
+            shutil.copy(cfg, home / "config.yaml.provider.bak")
+            data = yaml.safe_load(cfg.read_text()) or {}
+            model = data.get("model") if isinstance(data.get("model"), dict) else {}
+            model.update({
+                "provider": "openrouter",
+                "default": "openrouter/free",
+                "base_url": "",
+                "api_mode": "chat_completions",
+            })
+            data["model"] = model
+            cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+            print("✓ config.yaml → provider openrouter / model openrouter/free")
+        elif oc_key:
+            # OpenCode Zen — يعمل فقط من داخل OpenCode (غير صالح للخوادم الخارجية)
+            lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
+                     if not l.startswith("OPENCODE_API_KEY=")]
+            envf.write_text("\n".join(lines + [f"OPENCODE_API_KEY={oc_key}"]) + "\n")
+            print("✓ OPENCODE_API_KEY saved to .env")
 
-        shutil.copy(cfg, home / "config.yaml.opencode.bak")
-        data = yaml.safe_load(cfg.read_text()) or {}
-        providers = data.setdefault("providers", {})
-        providers["opencode"] = {
-            "api": "https://opencode.ai/zen/v1",
-            "api_key": "${OPENCODE_API_KEY}",
-        }
-        model = data.get("model") if isinstance(data.get("model"), dict) else {}
-        model.update({
-            "provider": "opencode",
-            "default": "big-pickle",
-            "base_url": "",
-            "api_mode": "chat_completions",
-        })
-        data["model"] = model
-        cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-        print("✓ config.yaml → provider opencode / model big-pickle (قد يُرفض خارج OpenCode)")
-    else:
-        print("⚠ لا يوجد أي مزود — ضع nous-auth.json في Hugging Face")
+            shutil.copy(cfg, home / "config.yaml.opencode.bak")
+            data = yaml.safe_load(cfg.read_text()) or {}
+            providers = data.setdefault("providers", {})
+            providers["opencode"] = {
+                "api": "https://opencode.ai/zen/v1",
+                "api_key": "${OPENCODE_API_KEY}",
+            }
+            model = data.get("model") if isinstance(data.get("model"), dict) else {}
+            model.update({
+                "provider": "opencode",
+                "default": "big-pickle",
+                "base_url": "",
+                "api_mode": "chat_completions",
+            })
+            data["model"] = model
+            cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+            print("✓ config.yaml → provider opencode / model big-pickle (قد يُرفض خارج OpenCode)")
+        else:
+            print("⚠ لا يوجد أي مزود — ضع GEMINI_API_KEY أو nous-auth.json في Render")
 PY
 
 echo "→ initial obsidian vault sync..."
