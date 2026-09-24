@@ -14,9 +14,7 @@ services:
         value: "86400"
       - key: RESTORE_MEMORY
         value: "1"
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GOOGLE_API_KEY
+      - key: OPENCODE_API_KEY
         sync: false
       - key: OBSIDIAN_REPO
         value: salah1593/obsidian-vault
