@@ -16,6 +16,10 @@ services:
         value: "1"
       - key: OPENCODE_API_KEY
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NOUS_MODEL
+        value: upstage/solar-pro4:free
       - key: OBSIDIAN_REPO
         value: salah1593/obsidian-vault
       - key: VAULT_SYNC_INTERVAL
