@@ -31,7 +31,7 @@ services:
       - key: OBSIDIAN_REPO
         value: salah1593/obsidian-vault
       - key: VAULT_SYNC_INTERVAL
-        value: "300"
+        value: "30"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_ALLOWED_USERS
