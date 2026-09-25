@@ -135,6 +135,46 @@ else:
                 tt["model_upgrade_enabled"] = False
                 print("✓ title_generation.model_upgrade_enabled = False (توفير الحصة)")
 
+        # سلسلة احتياطية تلقائية: إذا رفض Gemini (429/انتهت الحصة) ينتقل الطلب
+        # مباشرة إلى مزوّد مجاني آخر دون انقطاع — الحل الأوصى به في 2026.
+        chain = []
+        providers = data.setdefault("providers", {})
+        if not isinstance(providers, dict):
+            providers = {}
+            data["providers"] = providers
+
+        groq_key = (os.environ.get("GROQ_API_KEY") or "").strip()
+        if groq_key:
+            # Groq: مجاني، 1000 طلب/يوم (ضعف Gemini تقريباً)، بلا بطاقة
+            lines = [l for l in (envf.read_text().splitlines() if envf.exists() else [])
+                     if not l.startswith("GROQ_API_KEY=")]
+            envf.write_text("\n".join(lines + [f"GROQ_API_KEY={groq_key}"]) + "\n")
+            providers["groq"] = {
+                "api": "https://api.groq.com/openai/v1",
+                "api_key": "${GROQ_API_KEY}",
+            }
+            chain.append({
+                "provider": "groq",
+                "model": "openai/gpt-oss-120b",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_mode": "chat_completions",
+            })
+            print("✓ fallback 1 → Groq (openai/gpt-oss-120b) — مجاني 1000 طلب/يوم")
+
+        or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+        if or_key:
+            # OpenRouter: شبكة نماذج مجانية بلا بطاقة (خطة 50 طلب/يوم)
+            chain.append({
+                "provider": "openrouter",
+                "model": "openrouter/free",
+                "api_mode": "chat_completions",
+            })
+            print("✓ fallback 2 → OpenRouter (openrouter/free)")
+
+        if chain:
+            data["fallback_providers"] = chain
+            print("✓ fallback_providers = سلسلة احتياطية تلقائية (لا انقطاع عند نفاد الحصة)")
+
         cfg.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
         print(f"✓ config.yaml → provider gemini / model {GEMINI_MODEL}")
     elif has_nous_auth():
