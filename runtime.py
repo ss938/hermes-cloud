@@ -239,14 +239,49 @@ def vault_sync_once() -> None:
             log.warning("vault commit skipped: %s", out)
 
 
+def _vault_signature() -> str:
+    """بصمة سريعة لمجلد الملاحظات (اسم + حجم + وقت تعديل كل ملف) للكشف عن أي تغيير لحظياً."""
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        if not OBSIDIAN_DIR.exists():
+            return ""
+        for f in sorted(OBSIDIAN_DIR.rglob("*")):
+            if not f.is_file() or ".git" in f.parts:
+                continue
+            st = f.stat()
+            h.update(b"%s|%s|%d\n" % (str(f.relative_to(OBSIDIAN_DIR)).encode(), st.st_mtime_ns, st.st_size))
+        return h.hexdigest()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def vault_loop() -> None:
+    """مزامنة لحظية: دفع فوراً (خلال ثوانٍ) عندما يكتب نبراس ملاحظة + سحب دوري سريع لجهاز المستخدم."""
     time.sleep(30)
+    last_sig = _vault_signature()
+    last_pull = time.monotonic()
+    interval = max(VAULT_INTERVAL, 10)  # لا تقل عن 10 ثوانٍ
     while True:
         try:
-            vault_sync_once()
+            sig = _vault_signature()
+            if sig and sig != last_sig:
+                # ☑ تغيّرت الملاحظات محلياً (نبراس كتب) → مزامنة فورية الآن
+                log.info("vault local change detected -> syncing now")
+                vault_sync_once()
+                last_sig = _vault_signature()
+                last_pull = time.monotonic()
+            elif time.monotonic() - last_pull >= interval:
+                # سحب دوري: تغييرات المستخدم من Obsidian على جهازه
+                rc, out = _run(["git", "pull", "--rebase", "--autostash"], cwd=OBSIDIAN_DIR)
+                if rc != 0:
+                    log.warning("vault pull issue: %s", out)
+                else:
+                    log.info("obsidian vault pulled from remote")
+                last_pull = time.monotonic()
         except Exception as exc:  # noqa: BLE001
             log.warning("vault sync error: %s", exc)
-        time.sleep(VAULT_INTERVAL)
+        time.sleep(2)  # فحص المجلد كل ثانيتين — التزامن شبه لحظي
 
 
 class HealthHandler(BaseHTTPRequestHandler):
