@@ -22,6 +22,8 @@ services:
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
       - key: GEMINI_MODEL
         value: gemini-3-flash
       - key: NOUS_MODEL
@@ -38,3 +40,4 @@ services:
         sync: false
       - key: TELEGRAM_HOME_CHANNEL_THREAD_ID
         sync: false
+
